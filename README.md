@@ -1,179 +1,82 @@
 # depchase
 
-The depchase python module is an interface to the DNF API to perform
-complicated lookups on package dependencies.
+The depchase tool is an simple script to lookup runtime (and/or buildtime)
+requirements of package(s).
 
 ## Setup
-This tool requires the following pre-requisites:
-* python3-dnf >= 2.0 (See below)
-* python3-click
 
-### Installing DNF 2.x on Fedora 24 and 25
-```
-$ dnf copr enable rpmsoftwaremanagement/dnf-nightly
-$ dnf update python3-dnf
-```
+- python3-solv
+- python3-click
+- python3-smartcols
 
-## Install the package locally
+## Installation
+
 ```
 $ python3 setup.py install --user
 ```
-This will install the `depchase` command as `~/.local/bin/depchase`
 
-You may wish to add this to your default PATH variable in `~/.bashrc` by doing:
+You need to download files ending in `-primary.xml.gz` and `-filelists.xml.gz` and a file `repomd.xml` for each architecture you want to search through and for the sources. For Fedora rawhide you can download them from here:
+ * https://dl.fedoraproject.org/pub/fedora/linux/development/rawhide/Everything/x86_64/os/repodata/
+ * https://dl.fedoraproject.org/pub/fedora/linux/development/rawhide/Everything/source/tree/repodata/
+
+The directory structure should be as follows:
 ```
-$ echo "export PATH=$PATH:$HOME/.local/bin" >> ~/.bashrc
-```
-
-## How to run:
-
-### Get the source RPM for one or more packages
-```
-Usage: depchase getsourcerpm [OPTIONS] [PKGNAMES]...
-
-  Look up the SRPMs from which these binary RPMs were generated.
-
-  This list will be displayed deduplicated and sorted.
-
-Options:
-  --full-name / --no-full-name
-  --os TEXT                     Specify the operating system.
-  --version INTEGER             Specify the version of the OS repodata to
-                                compare against.
-  --arch TEXT                   Specify the CPU architecture.
-  --milestone TEXT              Specify the pre-release milestone. If not
-                                provided, the final release will be used.
-  --help                        Show this message and exit.
+repos
+├── sources
+│   └── repodata
+│       ├── 41989692c9d39640c5e9321b3d3b33ac9677d12cbae4c87a51e2f4f9977dee2e-filelists.xml.gz
+│       ├── 85006762236a619d384209fda289d0ff02fc296400bdf48bc1c6a524b499c459-primary.xml.gz
+│       └── repomd.xml
+└── x86_64
+    └── repodata
+        ├── 4e9d08a9d6ce135fb28c6a4df1fbabed317e16eba21f7acb814cc6c37ef4cca0-primary.xml.gz
+        ├── 51a55ad79b12153b8c39b9fcceaa88c4f1d208100e9918f5cdf88e89920dedac-filelists.xml.gz
+        └── repomd.xml
 ```
 
-
-### Get the recursive list of all runtime dependencies for one or more packages
-```
-Usage: depchase neededby [OPTIONS] [PKGNAMES]...
-
-  Look up the dependencies for each specified package and display them in a
-  human-parseable format.
-
-Options:
-  --hint TEXT                     Specify a package to be selected when more
-                                  than one package could satisfy a
-                                  dependency.
-                                  This option may be specified multiple times.
-                                  For example, it is recommended to use
-                                  --hint=glibc-minimal-langpack
-  --filter TEXT                   Specify a package to be skipped during
-                                  processing. This option may be
-                                  specified
-                                  multiple times.
-
-                                  This is useful when some
-                                  packages are provided by a lower-level
-                                  module
-                                  already contains the package and its
-                                  dependencies.
-  --whatreqs TEXT                 Specify a package that you want to identify
-                                  what pulls it into the complete
-                                  set. This
-                                  option may be specified multiple times.
-  --recommends / --no-recommends
-  --pick-first / --no-pick-first  If multiple packages could satisfy a
-                                  dependency and no --hint package will
-                                  fulfill the requirement, automatically
-                                  select one from the list.
-
-                                  Note: this result
-                                  may differ between runs depending upon how
-                                  the list is
-                                  sorted. It is recommended to use
-                                  --hint instead, where practical.
-  --os TEXT                       Specify the operating system.
-  --version INTEGER               Specify the version of the OS repodata to
-                                  compare against.
-  --arch TEXT                     Specify the CPU architecture.
-  --milestone TEXT                Specify the pre-release milestone. If not
-                                  provided, the final release will be used.
-  --binary-short-file TEXT        The file to contain the short version of the
-                                  detected dependencies. (Just the package
-                                  name)
-  --binary-full-file TEXT         The file to contain the long version of the
-                                  detected dependencies. (Package name,
-                                  version, architecture, etc.)
-  --source-short-file TEXT        The file to contain the short version of the
-                                  detected dependencies. (Just the package
-                                  name)
-  --source-full-file TEXT         The file to contain the long version of the
-                                  detected dependencies. (Package name,
-                                  version, architecture, etc.)
-  --help                          Show this message and exit.
+And the repos.cfg file should contain:
 
 ```
+[DEFAULT]
+basedir = /path/to/the/repos/  # FILL HERE THE CORRECT PATH
 
-### Get the list of packages required to self-host for one or more packages
-"Self-hosting" in this context means "all of the packages necessary to be able
-to build all the packages listed on the command line, plus recursively any
-packages required to build those BuildRequires as well.
+[base]
+path = ${DEFAULT:basedir}/{arch}
+[base-source]
+path = ${DEFAULT:basedir}/sources
+```
+
+## Usage
 
 ```
-Usage: depchase neededtoselfhost [OPTIONS] [PKGNAMES]...
+$ depchase -a x86_64 -c repos.cfg resolve [--selfhost] foo --hint bar
+```
 
-  Look up the build dependencies for each specified package and all of their
-  dependencies, recursively and display them in a human-parseable format.
+`--selfhost` switches to searching of build dependencies
 
-Options:
-  --hint TEXT                     Specify a package to be selected when more
-                                  than one package could satisfy a
-                                  dependency.
-                                  This option may be specified multiple times.
-                                  For example, it is recommended to use
-                                  --hint=glibc-minimal-langpack
+### Output
 
-                                  For build
-                                  dependencies, the default is to exclude
-                                  Recommends: from the
-                                  dependencies of the
-                                  BuildRequires.
-  --recommends / --no-recommends
-  --pick-first / --no-pick-first  If multiple packages could satisfy a
-                                  dependency and no --hint package will
-                                  fulfill the requirement, automatically
-                                  select one from the list.
+Output is a list of binary and source packages which were required for
+resolution. You can parse them into multiple files using simple bash
+script:
 
-                                  Note: this result
-                                  may differ between runs depending upon how
-                                  the list is
-                                  sorted. It is recommended to use
-                                  --hint instead, where practical.
-  --filter TEXT                   Specify a package to be skipped during
-                                  processing. This option may be
-                                  specified
-                                  multiple times.
+```bash
+#!/bin/bash -eu
 
-                                  This is useful when some
-                                  packages are provided by a lower-level
-                                  module
-                                  already contains the package and its
-                                  dependencies.
-  --whatreqs TEXT                 Specify a package that you want to identify
-                                  what pulls it into the complete
-                                  set. This
-                                  option may be specified multiple times.
-  --os TEXT                       Specify the operating system.
-  --version INTEGER               Specify the version of the OS repodata to
-                                  compare against.
-  --arch TEXT                     Specify the CPU architecture.
-  --milestone TEXT                Specify the pre-release milestone. If not
-                                  provided, the final release will be used.
-  --binary-short-file TEXT        The file to contain the short version of the
-                                  detected dependencies. (Just the package
-                                  name)
-  --binary-full-file TEXT         The file to contain the long version of the
-                                  detected dependencies. (Package name,
-                                  version, architecture, etc.)
-  --source-short-file TEXT        The file to contain the short version of the
-                                  detected dependencies. (Just the package
-                                  name)
-  --source-full-file TEXT         The file to contain the long version of the
-                                  detected dependencies. (Package name,
-                                  version, architecture, etc.)
-  --help                          Show this message and exit.
+PREFIX=$1
+> $PREFIX-binary-packages-full.txt
+> $PREFIX-binary-packages-short.txt
+> $PREFIX-source-packages-full.txt
+> $PREFIX-source-packages-short.txt
+while read -r nevra; do
+  [[ "$nevra" == *.src || "$nevra" == *.nosrc ]] && type_="source" || type_="binary"
+  name=${nevra%-*-*}
+  echo "$nevra" >> $PREFIX-$type_-packages-full.txt
+  echo "$name" >> $PREFIX-$type_-packages-short.txt
+done
+
+export LC_ALL=C
+for f in $PREFIX-{binary,source}-packages-{full,short}.txt; do
+  sort -u $f -o $f
+done
 ```
